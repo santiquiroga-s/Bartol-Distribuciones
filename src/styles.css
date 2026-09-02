@@ -198,3 +198,62 @@
   }
   .list-view .card .product-info .price{margin-top:0}
 }
+/* Corrección del selector Productos / Ventas en móvil */
+.section-switch{
+  position:relative;
+  z-index:5;
+}
+
+.section-switch button{
+  position:relative;
+  z-index:6;
+  pointer-events:auto;
+  touch-action:manipulation;
+  min-width:0;
+}
+
+@media(max-width:650px){
+  .section-switch{
+    width:100%;
+    display:flex;
+  }
+
+  .section-switch button{
+    flex:1 1 0;
+    width:50%;
+    min-width:0;
+    justify-content:center;
+  }
+}
+
+/* Botones superiores completos en móvil */
+@media(max-width:650px){
+  .header-actions{
+    width:100%;
+    margin-left:0;
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:8px;
+  }
+
+  .header-actions > button{
+    width:100%;
+    min-width:0;
+    justify-content:center;
+    white-space:nowrap;
+    font-size:13px;
+    padding:10px 8px;
+  }
+
+  .header-actions .secondary-action{
+    font-size:13px;
+  }
+
+  .header-actions .add{
+    font-size:13px;
+  }
+
+  .header-actions svg{
+    flex-shrink:0;
+  }
+}
