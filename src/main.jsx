@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import * as XLSX from 'xlsx-js-style';
+import ExcelJS from 'exceljs';
 import { createRoot } from 'react-dom/client';
 import { supabase } from './lib/supabase';
 import bartolLogo from './assets/bartol-logo.png';
@@ -152,6 +152,7 @@ function App() {
   });
 
   const [paymentHistoryModal, setPaymentHistoryModal] = useState(null);
+  const [editingPayment, setEditingPayment] = useState(null);
 
   const isStaff = role === 'owner' || role === 'employee';
   const isOwner = role === 'owner';
@@ -1031,7 +1032,7 @@ function App() {
     new Date(`${salesMonth}-01T12:00:00`)
   );
 
-  const exportPrices = () => {
+  const exportPrices = async () => {
     const exportProducts = products
       .filter(p => p.active)
       .sort((a, b) => {
@@ -1040,15 +1041,7 @@ function App() {
         }
 
         return a.name.localeCompare(b.name);
-      })
-      .map(p => ({
-        Producto: p.name,
-        Categoría: p.category,
-        'Precio de venta':
-          Number(p.price) === 0
-            ? 'PRECIO PENDIENTE'
-            : Number(p.price)
-      }));
+      });
 
     if (exportProducts.length === 0) {
       showNotification(
@@ -1058,73 +1051,166 @@ function App() {
       return;
     }
 
-    const worksheet = XLSX.utils.json_to_sheet(
-      exportProducts
-    );
+    try {
+      const workbook = new ExcelJS.Workbook();
 
-    /*
-      Ancho de columnas:
-      A Producto
-      B Categoría
-      C Precio de venta
-    */
-    worksheet['!cols'] = [
-      { wch: 40 },
-      { wch: 22 },
-      { wch: 20 }
-    ];
+      const worksheet = workbook.addWorksheet(
+        'Lista de precios'
+      );
 
-    /*
-      Permite filtrar y ordenar desde Excel.
-    */
-    worksheet['!autofilter'] = {
-      ref: `A1:C${exportProducts.length + 1}`
-    };
+      /*
+        Ancho de columnas:
+        A Producto
+        B Precio de Venta
+        C Categoría
+      */
+      worksheet.columns = [
+        { width: 42 },
+        { width: 20 },
+        { width: 22 }
+      ];
 
-    /*
-      Formato moneda para la columna
-      Precio de venta.
-    */
-    const range = XLSX.utils.decode_range(
-      worksheet['!ref']
-    );
+      /*
+        Encabezados.
+      */
+      const headerRow = worksheet.addRow([
+        'Producto',
+        'Precio de Venta',
+        'Categoría'
+      ]);
 
-    for (
-      let row = 1;
-      row <= range.e.r;
-      row++
-    ) {
-      const cellAddress = XLSX.utils.encode_cell({
-        r: row,
-        c: 2
+      /*
+        Color celeste igual al utilizado
+        en los encabezados del Excel de ventas.
+      */
+      headerRow.eachCell(cell => {
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: {
+            argb: 'FFD9EAF7'
+          }
+        };
+
+        cell.font = {
+          bold: true
+        };
+
+        cell.border = {
+          top: {
+            style: 'thin',
+            color: { argb: 'FFD9D9D9' }
+          },
+          bottom: {
+            style: 'thin',
+            color: { argb: 'FFD9D9D9' }
+          },
+          left: {
+            style: 'thin',
+            color: { argb: 'FFD9D9D9' }
+          },
+          right: {
+            style: 'thin',
+            color: { argb: 'FFD9D9D9' }
+          }
+        };
+
+        cell.alignment = {
+          vertical: 'middle'
+        };
       });
 
-      const cell = worksheet[cellAddress];
+      /*
+        Productos.
+      */
+      exportProducts.forEach(product => {
+        const price =
+          Number(product.price) === 0
+            ? 'PRECIO PENDIENTE'
+            : Number(product.price);
 
-      if (
-        cell &&
-        typeof cell.v === 'number'
-      ) {
-        cell.z = '$ #,##0';
-      }
+        const row = worksheet.addRow([
+          product.name,
+          price,
+          product.category
+        ]);
+
+        /*
+          Formato moneda únicamente cuando
+          el producto tiene un precio numérico.
+        */
+        const priceCell = row.getCell(2);
+
+        if (typeof priceCell.value === 'number') {
+          priceCell.numFmt = '$ #,##0';
+        }
+      });
+
+      /*
+        Permite filtrar y ordenar desde Excel.
+      */
+      worksheet.autoFilter = {
+        from: 'A1',
+        to: `C${worksheet.rowCount}`
+      };
+
+      /*
+        Dejamos fija la fila de encabezados.
+      */
+      worksheet.views = [
+        {
+          state: 'frozen',
+          xSplit: 0,
+          ySplit: 1,
+          topLeftCell: 'A2',
+          activeCell: 'A2'
+        }
+      ];
+
+      /*
+        Generamos y descargamos el archivo.
+      */
+      const buffer =
+        await workbook.xlsx.writeBuffer();
+
+      const blob = new Blob(
+        [buffer],
+        {
+          type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        }
+      );
+
+      const url =
+        URL.createObjectURL(blob);
+
+      const link =
+        document.createElement('a');
+
+      link.href = url;
+
+      link.download =
+        `lista-precios-bartol-${todayISO()}.xlsx`;
+
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      URL.revokeObjectURL(url);
+
+      showNotification(
+        'Lista de precios exportada a Excel'
+      );
+    } catch (error) {
+      console.error(
+        'Error exportando lista de precios:',
+        error
+      );
+
+      showNotification(
+        'No se pudo exportar la lista de precios',
+        'warning'
+      );
     }
-
-    const workbook = XLSX.utils.book_new();
-
-    XLSX.utils.book_append_sheet(
-      workbook,
-      worksheet,
-      'Lista de precios'
-    );
-
-    XLSX.writeFile(
-      workbook,
-      `lista-precios-bartol-${todayISO()}.xlsx`
-    );
-
-    showNotification(
-      'Lista de precios exportada a Excel'
-    );
   };
 
   const openSaleAdd = () => {
@@ -1439,6 +1525,43 @@ function App() {
         );
 
         return;
+      }
+
+      /*
+        Si la venta tiene un único pago, permitimos
+        corregir su medio de pago desde Editar venta.
+      */
+      if (saleModal.payments?.length === 1) {
+        const payment = saleModal.payments[0];
+
+        if (
+          payment.paymentMethod !==
+          saleForm.paymentMethod
+        ) {
+          const { error: paymentMethodError } =
+            await supabase.rpc(
+              'actualizar_medio_pago',
+              {
+                p_pago_id: payment.id,
+                p_medio_pago:
+                  saleForm.paymentMethod
+              }
+            );
+
+          if (paymentMethodError) {
+            console.error(
+              'Error actualizando medio de pago:',
+              paymentMethodError
+            );
+
+            showNotification(
+              'La venta se actualizó, pero no se pudo modificar el medio de pago',
+              'warning'
+            );
+
+            return;
+          }
+        }
       }
 
       saleId = saleModal.id;
@@ -1829,6 +1952,80 @@ function App() {
     showNotification('Pago registrado');
   };
 
+  const savePaymentMethod = async () => {
+    if (!editingPayment) return;
+
+    const { error } = await supabase.rpc(
+      'actualizar_medio_pago',
+      {
+        p_pago_id: editingPayment.id,
+        p_medio_pago: editingPayment.paymentMethod
+      }
+    );
+
+    if (error) {
+      console.error(
+        'Error actualizando medio de pago:',
+        error
+      );
+
+      showNotification(
+        'No se pudo actualizar el medio de pago',
+        'warning'
+      );
+
+      return;
+    }
+
+    /*
+      Actualizamos la venta en el estado principal.
+    */
+    setSales(currentSales =>
+      currentSales.map(sale => {
+        if (sale.id !== editingPayment.saleId) {
+          return sale;
+        }
+
+        const updatedPayments = sale.payments.map(payment =>
+          payment.id === editingPayment.id
+            ? {
+                ...payment,
+                paymentMethod: editingPayment.paymentMethod
+              }
+            : payment
+        );
+
+        return {
+          ...sale,
+          payments: updatedPayments
+        };
+      })
+    );
+
+    /*
+      Actualizamos también el historial que está abierto.
+    */
+    setPaymentHistoryModal(currentSale => {
+      if (!currentSale) return null;
+
+      return {
+        ...currentSale,
+        payments: currentSale.payments.map(payment =>
+          payment.id === editingPayment.id
+            ? {
+                ...payment,
+                paymentMethod: editingPayment.paymentMethod
+              }
+            : payment
+        )
+      };
+    });
+
+    setEditingPayment(null);
+
+    showNotification('Medio de pago actualizado');
+  };
+
 
   const removeSale = s => {
     setConfirm({
@@ -1895,7 +2092,7 @@ function App() {
     await remove();
   };
 
-  const exportSales = () => {
+  const exportSalesExcelJS = async () => {
     if (!isOwner) {
       showNotification(
         'Solo el dueño puede exportar las ventas',
@@ -1912,744 +2109,589 @@ function App() {
       return;
     }
 
-    const workbook = XLSX.utils.book_new();
+    try {
+      const workbook = new ExcelJS.Workbook();
 
-    /*
-      Agrupamos cada venta según el mes
-      en que fue realizada.
-    */
-    const salesByMonth = {};
+      /*
+        Agrupamos cada venta según el mes
+        en que fue realizada.
+      */
+      const salesByMonth = {};
 
-    sales.forEach(sale => {
-      const monthKey = sale.date.slice(0, 7);
+      sales.forEach(sale => {
+        const monthKey = sale.date.slice(0, 7);
 
-      if (!salesByMonth[monthKey]) {
-        salesByMonth[monthKey] = [];
-      }
-
-      salesByMonth[monthKey].push(sale);
-    });
-
-    const sortedMonths = Object.keys(
-      salesByMonth
-    ).sort();
-
-    sortedMonths.forEach(monthKey => {
-      const monthSales = [
-        ...salesByMonth[monthKey]
-      ].sort((a, b) => {
-        if (a.date !== b.date) {
-          return a.date.localeCompare(b.date);
+        if (!salesByMonth[monthKey]) {
+          salesByMonth[monthKey] = [];
         }
 
-        return (
-          new Date(a.createdAt) -
-          new Date(b.createdAt)
-        );
+        salesByMonth[monthKey].push(sale);
       });
 
-      const rows = [];
-      const saleRowStatuses = [];
-      const saleEndRows = [];
+      const sortedMonths = Object.keys(
+        salesByMonth
+      ).sort();
 
-      let totalSold = 0;
-      let totalPaid = 0;
-      let totalPending = 0;
-
-      let totalCash = 0;
-      let totalMercadoPago = 0;
-
-      let totalProfit = 0;
-
-      let hasPendingPayments = false;
-      let hasPendingCost = false;
-
-      /*
-        =====================================
-        VENTAS DEL MES
-        =====================================
-      */
-
-      rows.push([
-        'VENTAS DEL MES'
-      ]);
-
-      /*
-        Encabezados de la tabla.
-      */
-      rows.push([
-        'N° Venta',
-        'Fecha',
-        'Producto',
-        'Cantidad',
-        'Precio Unitario',
-        'Subtotal',
-        'Costo Unitario',
-        'Ganancia',
-        'Descripción',
-        'Estado',
-        'Total Venta',
-        'Pagado',
-        'Pendiente',
-        'Medio de Pago'
-      ]);
-
-      monthSales.forEach(sale => {
-        const saleTotal =
-          Number(sale.total) || 0;
-
-        const salePaid =
-          Number(sale.paid) || 0;
-
-        const salePending =
-          Number(sale.pending) || 0;
-
-        /*
-          Estos totales corresponden a las
-          ventas realizadas en este mes.
-        */
-        totalSold += saleTotal;
-        totalPaid += salePaid;
-        totalPending += salePending;
-
-        if (sale.paymentStatus !== 'pagada') {
-          hasPendingPayments = true;
-        }
-
-        /*
-          Los medios de pago se acumulan dentro
-          del mes original de la venta,
-          independientemente de la fecha
-          en que se realizó cada pago.
-        */
-        (sale.payments || []).forEach(payment => {
-          const amount =
-            Number(payment.amount) || 0;
-
-          if (
-            payment.paymentMethod ===
-            'Mercado Pago'
-          ) {
-            totalMercadoPago += amount;
-          } else if (
-            payment.paymentMethod ===
-            'Efectivo'
-          ) {
-            totalCash += amount;
+      sortedMonths.forEach(monthKey => {
+        const monthSales = [
+          ...salesByMonth[monthKey]
+        ].sort((a, b) => {
+          if (a.date !== b.date) {
+            return a.date.localeCompare(b.date);
           }
+
+          return (
+            new Date(a.createdAt) -
+            new Date(b.createdAt)
+          );
         });
 
         /*
-          Obtenemos los distintos medios utilizados
-          para esta venta.
+          Nombre de la hoja.
         */
-        const paymentMethods = [
-          ...new Set(
-            (sale.payments || [])
-              .map(payment => payment.paymentMethod)
-              .filter(Boolean)
-          )
+        const [year, month] = monthKey.split('-');
+
+        const monthName =
+          new Intl.DateTimeFormat(
+            'es-AR',
+            { month: 'long' }
+          ).format(
+            new Date(
+              Number(year),
+              Number(month) - 1,
+              1
+            )
+          );
+
+        const rawSheetName =
+          `${monthName} ${year}`;
+
+        const sheetName =
+          rawSheetName.charAt(0).toUpperCase() +
+          rawSheetName.slice(1);
+
+        const worksheet =
+          workbook.addWorksheet(sheetName);
+
+        /*
+          Ancho de columnas.
+        */
+        worksheet.columns = [
+          { width: 12 }, // N° Venta
+          { width: 22 }, // Fecha
+          { width: 33 }, // Producto
+          { width: 12 }, // Cantidad
+          { width: 17 }, // Precio Unitario
+          { width: 12 }, // Subtotal
+          { width: 17 }, // Costo Unitario
+          { width: 12 }, // Ganancia
+          { width: 26 }, // Descripción
+          { width: 15 }, // Estado
+          { width: 15 }, // Total Venta
+          { width: 15 }, // Pagado
+          { width: 15 }, // Pendiente
+          { width: 22 }  // Medio de Pago
         ];
 
-        let paymentMethodText = 'SIN PAGOS';
+        /*
+          FILA 1 - VENTAS DEL MES
+        */
+        worksheet.addRow([
+          'VENTAS DEL MES'
+        ]);
 
-        if (paymentMethods.length > 0) {
-          paymentMethodText =
-            paymentMethods.join(' / ');
-        }
+        worksheet.mergeCells('A1:N1');
 
-        const statusText =
-          sale.paymentStatus === 'pagada'
-            ? 'PAGADA'
-            : sale.paymentStatus === 'parcial'
-            ? 'PAGO PARCIAL'
-            : 'PENDIENTE';
+        const titleCell = worksheet.getCell('A1');
+
+        titleCell.font = {
+          bold: true,
+          color: { argb: 'FFFFFFFF' },
+          size: 12
+        };
+
+        titleCell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FF1F4E78' }
+        };
+
+        titleCell.alignment = {
+          vertical: 'middle',
+          horizontal: 'center'
+        };
 
         /*
-          Una fila por cada producto de la venta.
+          FILA 2 - ENCABEZADOS
         */
-        (sale.items || []).forEach((item, itemIndex) => {
-          const itemProfit =
-            item.profit !== null &&
-            item.profit !== undefined
-              ? Number(item.profit)
-              : null;
+        const headerRow = worksheet.addRow([
+          'N° Venta',
+          'Fecha',
+          'Producto',
+          'Cantidad',
+          'Precio Unitario',
+          'Subtotal',
+          'Costo Unitario',
+          'Ganancia',
+          'Descripción',
+          'Estado',
+          'Total Venta',
+          'Pagado',
+          'Pendiente',
+          'Medio de Pago'
+        ]);
 
-          if (itemProfit === null) {
-            hasPendingCost = true;
-          } else {
-            totalProfit += itemProfit;
+        const thinBorder = {
+          top: {
+            style: 'thin',
+            color: { argb: 'FFD9D9D9' }
+          },
+          bottom: {
+            style: 'thin',
+            color: { argb: 'FFD9D9D9' }
+          },
+          left: {
+            style: 'thin',
+            color: { argb: 'FFD9D9D9' }
+          },
+          right: {
+            style: 'thin',
+            color: { argb: 'FFD9D9D9' }
+          }
+        };
+
+        headerRow.eachCell(cell => {
+          cell.font = {
+            bold: true
+          };
+
+          cell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FFD9EAF7' }
+          };
+
+          cell.border = thinBorder;
+
+          cell.alignment = {
+            vertical: 'middle'
+          };
+        });
+
+        /*
+          Congelamos las dos primeras filas.
+        */
+        worksheet.views = [
+          {
+            state: 'frozen',
+            xSplit: 0,
+            ySplit: 2,
+            topLeftCell: 'A3',
+            activeCell: 'A3'
+          }
+        ];
+
+        let totalSold = 0;
+        let totalPaid = 0;
+        let totalPending = 0;
+
+        let totalCash = 0;
+        let totalMercadoPago = 0;
+
+        let totalProfit = 0;
+
+        let hasPendingPayments = false;
+        let hasPendingCost = false;
+
+        /*
+          Agregamos las ventas.
+        */
+        monthSales.forEach(sale => {
+          const saleTotal =
+            Number(sale.total) || 0;
+
+          const salePaid =
+            Number(sale.paid) || 0;
+
+          const salePending =
+            Number(sale.pending) || 0;
+
+          totalSold += saleTotal;
+          totalPaid += salePaid;
+          totalPending += salePending;
+
+          if (sale.paymentStatus !== 'pagada') {
+            hasPendingPayments = true;
           }
 
           /*
-            Los datos generales de la venta solamente
-            se muestran en la primera fila.
-
-            N° Venta se mantiene en todas las filas
-            para identificar fácilmente qué productos
-            pertenecen a la misma venta.
+            Totales según medio de pago.
           */
-          const isFirstItem = itemIndex === 0;
+          (sale.payments || []).forEach(payment => {
+            const amount =
+              Number(payment.amount) || 0;
 
-          rows.push([
-            sale.id,
+            if (
+              payment.paymentMethod ===
+              'Mercado Pago'
+            ) {
+              totalMercadoPago += amount;
+            } else if (
+              payment.paymentMethod ===
+              'Efectivo'
+            ) {
+              totalCash += amount;
+            }
+          });
 
-            isFirstItem
-              ? dateShort(sale.date)
-              : '',
+          const paymentMethods = [
+            ...new Set(
+              (sale.payments || [])
+                .map(payment => payment.paymentMethod)
+                .filter(Boolean)
+            )
+          ];
 
-            item.productName,
+          let paymentMethodText = 'SIN PAGOS';
 
-            Number(item.quantity),
+          if (paymentMethods.length > 0) {
+            paymentMethodText =
+              paymentMethods.join(' / ');
+          }
 
-            Number(item.unitPrice),
+          const statusText =
+            sale.paymentStatus === 'pagada'
+              ? 'PAGADA'
+              : sale.paymentStatus === 'parcial'
+              ? 'PAGO PARCIAL'
+              : 'PENDIENTE';
 
-            Number(item.subtotal),
+          /*
+            Color correspondiente al estado.
+          */
+          let backgroundColor;
 
-            item.unitCost !== null &&
-            item.unitCost !== undefined
-              ? Number(item.unitCost)
-              : 'PENDIENTE',
+          if (sale.paymentStatus === 'pagada') {
+            backgroundColor = 'FFC6E0B4';
+          } else if (
+            sale.paymentStatus === 'parcial'
+          ) {
+            backgroundColor = 'FFFFE699';
+          } else {
+            backgroundColor = 'FFF4B7B2';
+          }
 
-            itemProfit !== null
-              ? itemProfit
-              : 'PENDIENTE',
+          /*
+            Una fila por producto.
+          */
+          (sale.items || []).forEach(
+            (item, itemIndex) => {
+              const itemProfit =
+                item.profit !== null &&
+                item.profit !== undefined
+                  ? Number(item.profit)
+                  : null;
 
-            isFirstItem
-              ? sale.description || ''
-              : '',
+              if (itemProfit === null) {
+                hasPendingCost = true;
+              } else {
+                totalProfit += itemProfit;
+              }
 
-            isFirstItem
-              ? statusText
-              : '',
+              const isFirstItem =
+                itemIndex === 0;
 
-            isFirstItem
-              ? saleTotal
-              : '',
+              const row = worksheet.addRow([
+                sale.id,
 
-            isFirstItem
-              ? salePaid
-              : '',
+                isFirstItem
+                  ? dateShort(sale.date)
+                  : '',
 
-            isFirstItem
-              ? salePending
-              : '',
+                item.productName,
 
-            isFirstItem
-              ? paymentMethodText
-              : ''
+                Number(item.quantity),
+
+                Number(item.unitPrice),
+
+                Number(item.subtotal),
+
+                item.unitCost !== null &&
+                item.unitCost !== undefined
+                  ? Number(item.unitCost)
+                  : 'PENDIENTE',
+
+                itemProfit !== null
+                  ? itemProfit
+                  : 'PENDIENTE',
+
+                isFirstItem
+                  ? sale.description || ''
+                  : '',
+
+                isFirstItem
+                  ? statusText
+                  : '',
+
+                isFirstItem
+                  ? saleTotal
+                  : '',
+
+                isFirstItem
+                  ? salePaid
+                  : '',
+
+                isFirstItem
+                  ? salePending
+                  : '',
+
+                isFirstItem
+                  ? paymentMethodText
+                  : ''
+              ]);
+
+              /*
+                Color y bordes de toda la fila.
+              */
+              row.eachCell(
+                { includeEmpty: true },
+                cell => {
+                  cell.fill = {
+                    type: 'pattern',
+                    pattern: 'solid',
+                    fgColor: {
+                      argb: backgroundColor
+                    }
+                  };
+
+                  cell.border = thinBorder;
+
+                  cell.alignment = {
+                    vertical: 'middle'
+                  };
+                }
+              );
+
+              /*
+                Formato moneda.
+                E, F, G, H? No:
+                E Precio Unitario
+                F Subtotal
+                G Costo Unitario
+                H Ganancia
+                K Total Venta
+                L Pagado
+                M Pendiente
+              */
+              [
+                5, 6, 7, 8,
+                11, 12, 13
+              ].forEach(column => {
+                const cell =
+                  row.getCell(column);
+
+                if (
+                  typeof cell.value === 'number'
+                ) {
+                  cell.numFmt = '$ #,##0';
+                }
+              });
+
+              /*
+                Última fila de la venta:
+                borde inferior más marcado.
+              */
+              if (
+                itemIndex ===
+                (sale.items || []).length - 1
+              ) {
+                row.eachCell(
+                  { includeEmpty: true },
+                  cell => {
+                    cell.border = {
+                      ...(cell.border || {}),
+
+                      bottom: {
+                        style: 'thick',
+                        color: {
+                          argb: 'FF595959'
+                        }
+                      }
+                    };
+                  }
+                );
+              }
+            }
+          );
+        });
+
+        /*
+          Última fila perteneciente a la tabla
+          de ventas.
+        */
+        const salesTableLastRow =
+          worksheet.rowCount;
+
+        /*
+          Filtro únicamente sobre las ventas.
+        */
+        if (salesTableLastRow >= 2) {
+          worksheet.autoFilter = {
+            from: 'A2',
+            to: `N${salesTableLastRow}`
+          };
+        }
+
+        /*
+          Dos filas vacías.
+        */
+        worksheet.addRow([]);
+        worksheet.addRow([]);
+
+        /*
+          RESUMEN DEL MES.
+        */
+        const summaryTitleRow =
+          worksheet.addRow([
+            'RESUMEN DEL MES'
           ]);
 
-          saleRowStatuses.push({
-            row: rows.length - 1,
-            status: sale.paymentStatus
-          });
-
-          if (
-            itemIndex === (sale.items || []).length - 1
-          ) {
-            saleEndRows.push(rows.length - 1);
-          }
-        });
-      });
-
-      /*
-        Guardamos dónde termina la tabla
-        para aplicar el filtro solamente
-        a VENTAS DEL MES.
-      */
-      const salesTableLastRow = rows.length;
-
-      /*
-        =====================================
-        RESUMEN DEL MES
-        =====================================
-      */
-
-      rows.push([]);
-      rows.push([]);
-
-      rows.push([
-        'RESUMEN DEL MES'
-      ]);
-
-      rows.push([
-        '',
-        'TOTAL VENDIDO',
-        '',
-        '',
-        totalSold
-      ]);
-
-      rows.push([
-        '',
-        'TOTAL COBRADO',
-        '',
-        '',
-        totalPaid
-      ]);
-
-      rows.push([
-        '',
-        'TOTAL PENDIENTE',
-        '',
-        '',
-        totalPending
-      ]);
-
-      rows.push([
-        '',
-        'TOTAL MERCADO PAGO',
-        '',
-        '',
-        totalMercadoPago
-      ]);
-
-      rows.push([
-        '',
-        'TOTAL EFECTIVO',
-        '',
-        '',
-        totalCash
-      ]);
-
-      /*
-        Ganancia.
-      */
-      let profitResult;
-
-      if (
-        hasPendingPayments &&
-        hasPendingCost
-      ) {
-        profitResult =
-          'HAY PAGOS PENDIENTES Y COSTOS PENDIENTES';
-      } else if (hasPendingPayments) {
-        profitResult =
-          'HAY PAGOS PENDIENTES';
-      } else if (hasPendingCost) {
-        profitResult =
-          'HAY COSTOS PENDIENTES';
-      } else {
-        profitResult = totalProfit;
-      }
-
-      rows.push([
-        '',
-        'TOTAL GANANCIAS',
-        '',
-        '',
-        profitResult
-      ]);
-
-      /*
-        Creamos la hoja a partir de una matriz
-        para controlar exactamente la ubicación
-        de cada columna.
-      */
-      const worksheet =
-        XLSX.utils.aoa_to_sheet(rows);
-
-      /*
-        Filtros de Excel.
-
-        La fila 2 contiene los encabezados.
-        El filtro llega solamente hasta la última
-        fila de ventas y NO incluye el resumen.
-
-        Columnas A:L.
-      */
-      if (salesTableLastRow >= 2) {
-        worksheet['!autofilter'] = {
-          ref: `A2:N${salesTableLastRow}`
-        };
-      }
-
-      /*
-        Ancho de columnas:
-
-        A Fecha
-        B Producto
-        C Cantidad
-        D Precio Unitario
-        E Subtotal
-        F Costo Unitario
-        G Ganancia
-        H Descripción
-        I Estado
-        J Pagado
-        K Pendiente
-        L Medio de Pago
-      */
-      worksheet['!cols'] = [
-        { wch: 11 }, // N° Venta
-        { wch: 21 }, // Fecha
-        { wch: 30 }, // Producto
-        { wch: 11 }, // Cantidad
-        { wch: 17 }, // Precio Unitario
-        { wch: 11 }, // Subtotal
-        { wch: 17 }, // Costo Unitario
-        { wch: 11 }, // Ganancia
-        { wch: 26 }, // Descripción
-        { wch: 15 }, // Estado
-        { wch: 15 }, // Total Venta
-        { wch: 15 }, // Pagado
-        { wch: 15 }, // Pendiente
-        { wch: 22 }  // Medio de Pago
-      ];
-
-      /*
-        =====================================
-        ESTILOS DEL EXCEL
-        =====================================
-      */
-
-      const thinBorder = {
-        top: {
-          style: 'thin',
-          color: { rgb: 'D9D9D9' }
-        },
-        bottom: {
-          style: 'thin',
-          color: { rgb: 'D9D9D9' }
-        },
-        left: {
-          style: 'thin',
-          color: { rgb: 'D9D9D9' }
-        },
-        right: {
-          style: 'thin',
-          color: { rgb: 'D9D9D9' }
-        }
-      };
-
-      /*
-        Combinamos las celdas del título
-        VENTAS DEL MES.
-      */
-      if (!worksheet['!merges']) {
-        worksheet['!merges'] = [];
-      }
-
-      worksheet['!merges'].push({
-        s: { r: 0, c: 0 },
-        e: { r: 0, c: 13 }
-      });
-
-      /*
-        VENTAS DEL MES - fila 1.
-      */
-      for (let col = 0; col <= 13; col++) {
-        const address = XLSX.utils.encode_cell({
-          r: 0,
-          c: col
-        });
-
-        if (!worksheet[address]) {
-          worksheet[address] = {
-            t: 's',
-            v: ''
-          };
-        }
-
-        worksheet[address].s = {
-          fill: {
-            fgColor: { rgb: '1F4E78' }
-          },
-          font: {
-            bold: true,
-            color: { rgb: 'FFFFFF' },
-            sz: 12
-          },
-          alignment: {
-            vertical: 'center',
-            horizontal: 'center'
-          }
-        };
-      }
-
-      /*
-        Encabezados de columnas - fila 2.
-      */
-      for (let col = 0; col <= 13; col++) {
-        const address = XLSX.utils.encode_cell({
-          r: 1,
-          c: col
-        });
-
-        const cell = worksheet[address];
-
-        if (cell) {
-          cell.s = {
-            fill: {
-              fgColor: { rgb: 'D9EAF7' }
-            },
-            font: {
-              bold: true
-            },
-            border: thinBorder,
-            alignment: {
-              vertical: 'center'
-            }
-          };
-        }
-      }
-
-      /*
-        Colores de las ventas según su estado.
-      */
-      saleRowStatuses.forEach(({ row, status }) => {
-        let backgroundColor;
-
-        if (status === 'pagada') {
-          backgroundColor = 'C6E0B4';
-        } else if (status === 'parcial') {
-          backgroundColor = 'FFE699';
-        } else {
-          backgroundColor = 'F4B7B2';
-        }
-
-        for (let col = 0; col <= 13; col++) {
-          const address = XLSX.utils.encode_cell({
-            r: row,
-            c: col
-          });
-
-          if (!worksheet[address]) {
-            worksheet[address] = {
-              t: 's',
-              v: ''
-            };
-          }
-
-          worksheet[address].s = {
-            fill: {
-              fgColor: {
-                rgb: backgroundColor
-              }
-            },
-            border: thinBorder,
-            alignment: {
-              vertical: 'center'
-            }
-          };
-        }
-      });
-
-      /*
-        Borde inferior para separar visualmente
-        una venta de la siguiente.
-      */
-      saleEndRows.forEach(row => {
-        for (let col = 0; col <= 13; col++) {
-          const address = XLSX.utils.encode_cell({
-            r: row,
-            c: col
-          });
-
-          const cell = worksheet[address];
-
-          if (cell) {
-            cell.s = {
-              ...cell.s,
-
-              border: {
-                ...(cell.s?.border || {}),
-
-                bottom: {
-                  style: 'thick',
-                  color: { rgb: '595959' }
-                }
-              }
-            };
-          }
-        }
-      });
-
-      /*
-        RESUMEN DEL MES.
-
-        Buscamos su fila para no depender de una
-        posición fija.
-      */
-      const summaryRowIndex = rows.findIndex(
-        row => row[0] === 'RESUMEN DEL MES'
-      );
-
-      if (summaryRowIndex !== -1) {
-        worksheet['!merges'].push({
-          s: { r: summaryRowIndex, c: 0 },
-          e: { r: summaryRowIndex, c: 13 }
-        });
-        /*
-          Título RESUMEN DEL MES.
-        */
-        for (let col = 0; col <= 13; col++) {
-          const address = XLSX.utils.encode_cell({
-            r: summaryRowIndex,
-            c: col
-          });
-
-          if (!worksheet[address]) {
-            worksheet[address] = {
-              t: 's',
-              v: ''
-            };
-          }
-
-          worksheet[address].s = {
-            fill: {
-              fgColor: { rgb: '1F4E78' }
-            },
-            font: {
-              bold: true,
-              color: { rgb: 'FFFFFF' },
-              sz: 12
-            }
-          };
-        }
-
-        /*
-          Las seis filas del resumen:
-          Total vendido
-          Total cobrado
-          Total pendiente
-          Mercado Pago
-          Efectivo
-          Ganancias
-        */
-        for (
-          let row = summaryRowIndex + 1;
-          row <= summaryRowIndex + 6;
-          row++
-        ) {
-          /*
-            B = nombre del total.
-          */
-          const labelAddress =
-            XLSX.utils.encode_cell({
-              r: row,
-              c: 1
-            });
-
-          if (worksheet[labelAddress]) {
-            worksheet[labelAddress].s = {
-              font: {
-                bold: true
-              },
-              border: thinBorder
-            };
-          }
-
-          /*
-            E = importe / resultado.
-          */
-          const valueAddress =
-            XLSX.utils.encode_cell({
-              r: row,
-              c: 4
-            });
-
-          if (worksheet[valueAddress]) {
-            worksheet[valueAddress].s = {
-              font: {
-                bold: true
-              },
-              border: thinBorder
-            };
-          }
-        }
-      }
-
-      /*
-        Aplicamos formato moneda.
-
-        D = Precio Unitario
-        E = Subtotal
-        F = Costo Unitario
-        G = Ganancia
-        J = Pagado
-        K = Pendiente
-
-        También funciona con las cifras
-        monetarias del resumen.
-      */
-      if (worksheet['!ref']) {
-        const range =
-          XLSX.utils.decode_range(
-            worksheet['!ref']
-          );
-
-        for (
-          let row = range.s.r;
-          row <= range.e.r;
-          row++
-        ) {
-          [4, 5, 6, 7, 10, 11, 12].forEach(
-            column => {
-              const address =
-                XLSX.utils.encode_cell({
-                  r: row,
-                  c: column
-                });
-
-              const cell =
-                worksheet[address];
-
-              if (
-                cell &&
-                typeof cell.v === 'number'
-              ) {
-                cell.z = '$ #,##0';
-              }
-            }
-          );
-        }
-      }
-
-      /*
-        Nombre de la hoja:
-        Agosto 2026, Septiembre 2026, etc.
-      */
-      const [year, month] =
-        monthKey.split('-');
-
-      const monthName =
-        new Intl.DateTimeFormat(
-          'es-AR',
-          {
-            month: 'long'
-          }
-        ).format(
-          new Date(
-            Number(year),
-            Number(month) - 1,
-            1
-          )
+        worksheet.mergeCells(
+          `A${summaryTitleRow.number}:N${summaryTitleRow.number}`
         );
 
-      const rawSheetName =
-        `${monthName} ${year}`;
+        const summaryTitleCell =
+          summaryTitleRow.getCell(1);
 
-      const sheetName =
-        rawSheetName.charAt(0).toUpperCase() +
-        rawSheetName.slice(1);
+        summaryTitleCell.font = {
+          bold: true,
+          color: { argb: 'FFFFFFFF' },
+          size: 12
+        };
 
-      XLSX.utils.book_append_sheet(
-        workbook,
-        worksheet,
-        sheetName
+        summaryTitleCell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FF1F4E78' }
+        };
+
+        /*
+          Calculamos resultado de ganancias.
+        */
+        let profitResult;
+
+        if (
+          hasPendingPayments &&
+          hasPendingCost
+        ) {
+          profitResult =
+            'HAY PAGOS PENDIENTES Y COSTOS PENDIENTES';
+        } else if (hasPendingPayments) {
+          profitResult =
+            'HAY PAGOS PENDIENTES';
+        } else if (hasPendingCost) {
+          profitResult =
+            'HAY COSTOS PENDIENTES';
+        } else {
+          profitResult = totalProfit;
+        }
+
+        const summaryData = [
+          ['TOTAL VENDIDO', totalSold],
+          ['TOTAL COBRADO', totalPaid],
+          ['TOTAL PENDIENTE', totalPending],
+          [
+            'TOTAL MERCADO PAGO',
+            totalMercadoPago
+          ],
+          ['TOTAL EFECTIVO', totalCash],
+          ['TOTAL GANANCIAS', profitResult]
+        ];
+
+        summaryData.forEach(
+          ([label, value]) => {
+            const row = worksheet.addRow([
+              '',
+              label,
+              '',
+              '',
+              value
+            ]);
+
+            const labelCell =
+              row.getCell(2);
+
+            const valueCell =
+              row.getCell(5);
+
+            labelCell.font = {
+              bold: true
+            };
+
+            valueCell.font = {
+              bold: true
+            };
+
+            labelCell.border =
+              thinBorder;
+
+            valueCell.border =
+              thinBorder;
+
+            if (
+              typeof value === 'number'
+            ) {
+              valueCell.numFmt =
+                '$ #,##0';
+            }
+          }
+        );
+      });
+
+      /*
+        Generamos el archivo.
+      */
+      const buffer =
+        await workbook.xlsx.writeBuffer();
+
+      const blob = new Blob(
+        [buffer],
+        {
+          type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        }
       );
-    });
 
-    XLSX.writeFile(
-      workbook,
-      `ventas-bartol-${todayISO()}.xlsx`
-    );
+      const url =
+        URL.createObjectURL(blob);
 
-    showNotification(
-      'Todas las ventas fueron exportadas a Excel'
-    );
+      const link =
+        document.createElement('a');
+
+      link.href = url;
+
+      link.download =
+        `ventas-bartol-${todayISO()}.xlsx`
+
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      URL.revokeObjectURL(url);
+
+      showNotification(
+        'Todas las ventas fueron exportadas a Excel'
+      );
+    } catch (error) {
+      console.error(
+        'Error exportando ventas con ExcelJS:',
+        error
+      );
+
+      showNotification(
+        'No se pudieron exportar las ventas',
+        'warning'
+      );
+    }
   };
 
   return (
@@ -2688,7 +2730,7 @@ function App() {
           {section === 'sales' && isOwner && (
             <button
               className="secondary-action"
-              onClick={exportSales}
+              onClick={exportSalesExcelJS}
             >
               <Download size={17} />
               Exportar Ventas
@@ -4065,50 +4107,58 @@ function App() {
                 </label>
               )}
 
-            {saleModal === 'add' &&
-              saleForm.paymentStatus !== 'pendiente' && (
-                <label>
-                  Forma de pago
+            {(
+              (
+                saleModal === 'add' &&
+                saleForm.paymentStatus !== 'pendiente'
+              ) ||
+              (
+                saleModal !== 'add' &&
+                saleModal?.payments?.length === 1
+              )
+            ) && (
+              <label>
+                Forma de pago
 
-                  <div className="payment-options">
-                    <button
-                      type="button"
-                      className={
-                        saleForm.paymentMethod === 'Efectivo'
-                          ? 'selected'
-                          : ''
-                      }
-                      onClick={() =>
-                        setSaleForm({
-                          ...saleForm,
-                          paymentMethod: 'Efectivo'
-                        })
-                      }
-                    >
-                      <Banknote size={18} />
-                      Efectivo
-                    </button>
+                <div className="payment-options">
+                  <button
+                    type="button"
+                    className={
+                      saleForm.paymentMethod === 'Efectivo'
+                        ? 'selected'
+                        : ''
+                    }
+                    onClick={() =>
+                      setSaleForm({
+                        ...saleForm,
+                        paymentMethod: 'Efectivo'
+                      })
+                    }
+                  >
+                    <Banknote size={18} />
+                    Efectivo
+                  </button>
 
-                    <button
-                      type="button"
-                      className={
-                        saleForm.paymentMethod === 'Mercado Pago'
-                          ? 'selected'
-                          : ''
-                      }
-                      onClick={() =>
-                        setSaleForm({
-                          ...saleForm,
-                          paymentMethod: 'Mercado Pago'
-                        })
-                      }
-                    >
-                      <WalletCards size={18} />
-                      Mercado Pago
-                    </button>
-                  </div>
-                </label>
-              )}
+                  <button
+                    type="button"
+                    className={
+                      saleForm.paymentMethod === 'Mercado Pago'
+                        ? 'selected'
+                        : ''
+                    }
+                    onClick={() =>
+                      setSaleForm({
+                        ...saleForm,
+                        paymentMethod: 'Mercado Pago'
+                      })
+                    }
+                  >
+                    <WalletCards size={18} />
+                    Mercado Pago
+                  </button>
+                </div>
+              </label>
+            )}
 
             <div className="sale-total-box">
               <span>Total cobrado</span>
@@ -4370,9 +4420,24 @@ function App() {
                     </small>
                   </div>
 
-                  <strong>
-                    {money(payment.amount)}
-                  </strong>
+                  <div className="payment-history-actions">
+                    <strong>
+                      {money(payment.amount)}
+                    </strong>
+
+                    <button
+                      type="button"
+                      title="Editar medio de pago"
+                      onClick={() =>
+                        setEditingPayment({
+                          ...payment,
+                          saleId: paymentHistoryModal.id
+                        })
+                      }
+                    >
+                      <Pencil size={15} />
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -4384,6 +4449,101 @@ function App() {
                 onClick={() => setPaymentHistoryModal(null)}
               >
                 Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+
+      {editingPayment && (
+        <div className="overlay">
+          <div className="modal">
+            <button
+              type="button"
+              className="close"
+              onClick={() => setEditingPayment(null)}
+            >
+              <X />
+            </button>
+
+            <div className="modal-icon">
+              <Pencil />
+            </div>
+
+            <h2>Editar medio de pago</h2>
+
+            <p>
+              Corregí el medio utilizado para este pago.
+            </p>
+
+            <label>
+              Importe
+
+              <input
+                type="text"
+                value={money(editingPayment.amount)}
+                disabled
+              />
+            </label>
+
+            <label>
+              Forma de pago
+
+              <div className="payment-options">
+                <button
+                  type="button"
+                  className={
+                    editingPayment.paymentMethod === 'Efectivo'
+                      ? 'selected'
+                      : ''
+                  }
+                  onClick={() =>
+                    setEditingPayment({
+                      ...editingPayment,
+                      paymentMethod: 'Efectivo'
+                    })
+                  }
+                >
+                  <Banknote size={18} />
+                  Efectivo
+                </button>
+
+                <button
+                  type="button"
+                  className={
+                    editingPayment.paymentMethod === 'Mercado Pago'
+                      ? 'selected'
+                      : ''
+                  }
+                  onClick={() =>
+                    setEditingPayment({
+                      ...editingPayment,
+                      paymentMethod: 'Mercado Pago'
+                    })
+                  }
+                >
+                  <WalletCards size={18} />
+                  Mercado Pago
+                </button>
+              </div>
+            </label>
+
+            <div className="modal-actions">
+              <button
+                type="button"
+                className="cancel"
+                onClick={() => setEditingPayment(null)}
+              >
+                Cancelar
+              </button>
+
+              <button
+                type="button"
+                className="save"
+                onClick={savePaymentMethod}
+              >
+                Guardar
               </button>
             </div>
           </div>

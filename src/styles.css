@@ -2361,6 +2361,32 @@ input[type='number'] {
   }
 }
 
+.payment-history-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.payment-history-actions button {
+  width: auto;
+  height: auto;
+  padding: 2px;
+  margin: 0;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  color: inherit;
+  cursor: pointer;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.payment-history-actions button:hover {
+  background: transparent;
+  transform: scale(1.1);
+}
 
 /* =========================================================
    CELULARES PEQUEÑOS
