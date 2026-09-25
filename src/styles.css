@@ -978,6 +978,11 @@ footer span {
   display: flex;
   flex-direction: column;
   gap: 9px;
+
+  max-height: 520px;
+  overflow-y: auto;
+  padding-right: 8px;
+  scroll-behavior: smooth;
 }
 
 /* Tarjeta venta */
@@ -1595,7 +1600,8 @@ footer span {
 /* Navegación entre días */
 
 .sale-date-navigation {
-  display: flex;
+  display: grid;
+  grid-template-columns: 38px 260px 38px;
   align-items: center;
   gap: 10px;
 }
