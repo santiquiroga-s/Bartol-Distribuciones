@@ -2646,3 +2646,11 @@ input[type='number'] {
     margin: 7px 0;
   }
 }
+
+.visibility-button.visible {
+  color: #2563eb;
+}
+
+.visibility-button.hidden {
+  color: #dc2626;
+}

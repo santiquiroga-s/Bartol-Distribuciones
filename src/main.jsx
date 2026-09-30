@@ -24,7 +24,9 @@ import {
   Banknote,
   WalletCards,
   CalendarDays,
-  History
+  History,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import './styles.css';
 
@@ -111,6 +113,7 @@ function App() {
   const [newCategory, setNewCategory] = useState('');
   const [confirm, setConfirm] = useState(null);
   const [restoreConfirm, setRestoreConfirm] = useState(null);
+  const [visibilityConfirm, setVisibilityConfirm] = useState(null);
   const [stockModal, setStockModal] = useState(null);
   const [stockValue, setStockValue] = useState('');
   const [notification, setNotification] = useState(null);
@@ -213,7 +216,7 @@ function App() {
     const loadProducts = async () => {
       const { data, error } = await supabase
         .from('productos')
-        .select('id, nombre, precio_venta, categoria,activo')
+        .select('id, nombre, precio_venta, categoria, activo, visible')
         .order('id', { ascending: true });
 
       if (error) {
@@ -275,7 +278,8 @@ function App() {
               ? Number(productStock.stock)
               : 0,
           category: product.categoria,
-          active: product.activo
+          active: product.activo,
+          visible: product.visible
         };
       });
 
@@ -950,7 +954,8 @@ function App() {
           cost: isOwner ? cost : 0,
           stock: 0,
           category: newProduct.categoria,
-          active: newProduct.activo
+          active: newProduct.activo,
+          visible: newProduct.visible ?? true
         }
       ]);
 
@@ -1086,6 +1091,49 @@ function App() {
     );
 
     showNotification('Producto restaurado');
+  };
+
+  const toggleProductVisibility = async product => {
+    if (!isOwner) return;
+
+    const newVisible = !product.visible;
+
+    const { error } = await supabase
+      .from('productos')
+      .update({
+        visible: newVisible
+      })
+      .eq('id', product.id);
+
+    if (error) {
+      console.error('Error cambiando visibilidad del producto:', error);
+
+      showNotification(
+        'No se pudo cambiar la visibilidad del producto',
+        'warning'
+      );
+
+      return;
+    }
+
+    setProducts(ps =>
+      ps.map(p =>
+        p.id === product.id
+          ? {
+              ...p,
+              visible: newVisible
+            }
+          : p
+      )
+    );
+
+    setVisibilityConfirm(null);
+
+    showNotification(
+      newVisible
+        ? 'Producto visible para empleados y clientes'
+        : 'Producto ocultado para empleados y clientes'
+    );
   };
 
   const clearSearch = () => setSearch('');
@@ -3043,6 +3091,28 @@ function App() {
                       <div className="actions">
                         {p.active ? (
                           <>
+                            {isOwner && (
+                              <button
+                                className={
+                                  p.visible
+                                    ? 'visibility-button visible'
+                                    : 'visibility-button hidden'
+                                }
+                                title={
+                                  p.visible
+                                    ? 'Ocultar producto'
+                                    : 'Mostrar producto'
+                                }
+                                onClick={() => setVisibilityConfirm(p)}
+                              >
+                                {p.visible ? (
+                                  <Eye size={16} />
+                                ) : (
+                                  <EyeOff size={16} />
+                                )}
+                              </button>
+                            )}
+
                             <button
                               title="Editar"
                               onClick={() => openEdit(p)}
@@ -5013,6 +5083,68 @@ function App() {
               </button>
             </div>
           </form>
+        </div>
+      )}
+
+      {visibilityConfirm && (
+        <div className="overlay">
+          <div className="confirm">
+            <button
+              type="button"
+              className="close"
+              onClick={() => setVisibilityConfirm(null)}
+              title="Cerrar"
+            >
+              <X />
+            </button>
+
+            <div className="modal-icon">
+              {visibilityConfirm.visible ? (
+                <EyeOff />
+              ) : (
+                <Eye />
+              )}
+            </div>
+
+            <h2>
+              {visibilityConfirm.visible
+                ? '¿Ocultar producto?'
+                : '¿Mostrar producto?'}
+            </h2>
+
+            <p>
+              {visibilityConfirm.visible ? (
+                <>
+                  <b>{visibilityConfirm.name}</b> dejará de aparecer
+                  para empleados y clientes. Vos vas a seguir
+                  viéndolo como dueño.
+                </>
+              ) : (
+                <>
+                  <b>{visibilityConfirm.name}</b> volverá a aparecer
+                  para empleados y clientes.
+                </>
+              )}
+            </p>
+
+            <div className="modal-actions">
+              <button
+                className="cancel"
+                onClick={() => setVisibilityConfirm(null)}
+              >
+                Cancelar
+              </button>
+
+              <button
+                className="save"
+                onClick={() =>
+                  toggleProductVisibility(visibilityConfirm)
+                }
+              >
+                {visibilityConfirm.visible ? 'Ocultar' : 'Mostrar'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
