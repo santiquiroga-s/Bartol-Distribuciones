@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import ExcelJS from 'exceljs';
 import { createRoot } from 'react-dom/client';
 import { supabase } from './lib/supabase';
@@ -141,6 +141,14 @@ function App() {
     todayISO().slice(0, 7)
   );
   const [salesSearch, setSalesSearch] = useState('');
+
+  const [paymentStatusFilter, setPaymentStatusFilter] = useState('todos');
+  const [paymentMethodFilter, setPaymentMethodFilter] = useState('todos');
+  const [salesOrder, setSalesOrder] = useState('reciente');
+  const [filterMenuOpen, setFilterMenuOpen] = useState(false);
+  const [sortMenuOpen, setSortMenuOpen] = useState(false);
+  const filterMenuRef = useRef(null);
+  const sortMenuRef = useRef(null);
 
   const [salesView, setSalesView] = useState('day');
 
@@ -459,6 +467,30 @@ function App() {
     loadSales();
   }, [isStaff, isOwner]);
 
+  useEffect(() => {
+    const handleClickOutside = event => {
+      if (
+        filterMenuRef.current &&
+        !filterMenuRef.current.contains(event.target)
+      ) {
+        setFilterMenuOpen(false);
+      }
+
+      if (
+        sortMenuRef.current &&
+        !sortMenuRef.current.contains(event.target)
+      ) {
+        setSortMenuOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
   const categories = [
     'Todos',
     'Huevos',
@@ -621,6 +653,74 @@ function App() {
         return new Date(b.createdAt) - new Date(a.createdAt);
       });
   }, [sales, salesSearch]);
+
+  const activeFiltersCount =
+    (paymentStatusFilter !== 'todos' ? 1 : 0) +
+    (paymentMethodFilter !== 'todos' ? 1 : 0);
+
+  const visibleSales = (
+    salesSearch.trim()
+      ? searchedSales
+      : salesView === 'day'
+        ? daySales
+        : monthSales
+  )
+    .filter(sale => {
+      // FILTRO POR ESTADO DE PAGO
+      if (
+        paymentStatusFilter !== 'todos' &&
+        sale.paymentStatus !== paymentStatusFilter
+      ) {
+        return false;
+      }
+
+      // FILTRO POR MEDIO DE PAGO
+      if (paymentMethodFilter !== 'todos') {
+        const hasPaymentMethod = (sale.payments || []).some(
+          payment =>
+            payment.paymentMethod === paymentMethodFilter
+        );
+
+        if (!hasPaymentMethod) {
+          return false;
+        }
+      }
+
+      return true;
+    })
+    .sort((a, b) => {
+      // MAYOR MONTO
+      if (salesOrder === 'mayor') {
+        return Number(b.total) - Number(a.total);
+      }
+
+      // MENOR MONTO
+      if (salesOrder === 'menor') {
+        return Number(a.total) - Number(b.total);
+      }
+
+      // MÁS ANTIGUA
+      if (salesOrder === 'antigua') {
+        if (a.date !== b.date) {
+          return a.date.localeCompare(b.date);
+        }
+
+        return (
+          new Date(a.createdAt) -
+          new Date(b.createdAt)
+        );
+      }
+
+      // MÁS RECIENTE
+      if (a.date !== b.date) {
+        return b.date.localeCompare(a.date);
+      }
+
+      return (
+        new Date(b.createdAt) -
+        new Date(a.createdAt)
+      );
+    });
 
   const totals = useMemo(() => {
     const result = {
@@ -3158,6 +3258,216 @@ function App() {
               </div>
             )}
 
+            <div className="sales-filter-toolbar">
+              {/* FILTRAR POR */}
+              <div className="sales-filter-wrapper" ref={filterMenuRef}>
+                <button
+                  type="button"
+                  className={`sales-filter-button ${
+                    activeFiltersCount > 0 ? 'active' : ''
+                  }`}
+                  onClick={() => {
+                    setFilterMenuOpen(prev => !prev);
+                    setSortMenuOpen(false);
+                  }}
+                >
+                  Filtrar por
+
+                  {activeFiltersCount > 0 && (
+                    <span className="filter-count">
+                      {activeFiltersCount}
+                    </span>
+                  )}
+
+                  <ChevronDown size={16} />
+                </button>
+
+                {filterMenuOpen && (
+                  <div className="sales-filter-menu">
+
+                    <div className="filter-menu-header">
+                      <strong>Filtrar por</strong>
+
+                      {activeFiltersCount > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPaymentStatusFilter('todos');
+                            setPaymentMethodFilter('todos');
+                          }}
+                        >
+                          Limpiar
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="filter-section">
+                      <span>Estado de pago</span>
+
+                      <label>
+                        <input
+                          type="radio"
+                          name="payment-status-filter"
+                          checked={paymentStatusFilter === 'todos'}
+                          onChange={() => setPaymentStatusFilter('todos')}
+                        />
+                        Todos
+                      </label>
+
+                      <label>
+                        <input
+                          type="radio"
+                          name="payment-status-filter"
+                          checked={paymentStatusFilter === 'pagada'}
+                          onChange={() => setPaymentStatusFilter('pagada')}
+                        />
+                        Pago completado
+                      </label>
+
+                      <label>
+                        <input
+                          type="radio"
+                          name="payment-status-filter"
+                          checked={paymentStatusFilter === 'parcial'}
+                          onChange={() => setPaymentStatusFilter('parcial')}
+                        />
+                        Pago parcial
+                      </label>
+
+                      <label>
+                        <input
+                          type="radio"
+                          name="payment-status-filter"
+                          checked={paymentStatusFilter === 'pendiente'}
+                          onChange={() => setPaymentStatusFilter('pendiente')}
+                        />
+                        Pago pendiente
+                      </label>
+                    </div>
+
+                    <div className="filter-divider" />
+
+                    <div className="filter-section">
+                      <span>Medio de pago</span>
+
+                      <label>
+                        <input
+                          type="radio"
+                          name="payment-method-filter"
+                          checked={paymentMethodFilter === 'todos'}
+                          onChange={() => setPaymentMethodFilter('todos')}
+                        />
+                        Todos
+                      </label>
+
+                      <label>
+                        <input
+                          type="radio"
+                          name="payment-method-filter"
+                          checked={paymentMethodFilter === 'Efectivo'}
+                          onChange={() => setPaymentMethodFilter('Efectivo')}
+                        />
+                        Efectivo
+                      </label>
+
+                      <label>
+                        <input
+                          type="radio"
+                          name="payment-method-filter"
+                          checked={paymentMethodFilter === 'Mercado Pago'}
+                          onChange={() => setPaymentMethodFilter('Mercado Pago')}
+                        />
+                        Mercado Pago
+                      </label>
+                    </div>
+
+                  </div>
+                )}
+              </div>
+
+
+              {/* ORDENAR POR */}
+              <div className="sales-filter-wrapper" ref={sortMenuRef}>
+                <button
+                  type="button"
+                  className="sales-filter-button"
+                  onClick={() => {
+                    setSortMenuOpen(prev => !prev);
+                    setFilterMenuOpen(false);
+                  }}
+                >
+                  Ordenar por
+                  <ChevronDown size={16} />
+                </button>
+
+                {sortMenuOpen && (
+                  <div className="sales-filter-menu sales-sort-menu">
+
+                    <div className="filter-menu-header">
+                      <strong>Ordenar por</strong>
+                    </div>
+
+                    <div className="filter-section">
+
+                      <label>
+                        <input
+                          type="radio"
+                          name="sales-order"
+                          checked={salesOrder === 'reciente'}
+                          onChange={() => {
+                            setSalesOrder('reciente');
+                            setSortMenuOpen(false);
+                          }}
+                        />
+                        Más recientes
+                      </label>
+
+                      <label>
+                        <input
+                          type="radio"
+                          name="sales-order"
+                          checked={salesOrder === 'antigua'}
+                          onChange={() => {
+                            setSalesOrder('antigua');
+                            setSortMenuOpen(false);
+                          }}
+                        />
+                        Más antiguas
+                      </label>
+
+                      <label>
+                        <input
+                          type="radio"
+                          name="sales-order"
+                          checked={salesOrder === 'mayor'}
+                          onChange={() => {
+                            setSalesOrder('mayor');
+                            setSortMenuOpen(false);
+                          }}
+                        />
+                        Mayor monto
+                      </label>
+
+                      <label>
+                        <input
+                          type="radio"
+                          name="sales-order"
+                          checked={salesOrder === 'menor'}
+                          onChange={() => {
+                            setSalesOrder('menor');
+                            setSortMenuOpen(false);
+                          }}
+                        />
+                        Menor monto
+                      </label>
+
+                    </div>
+                  </div>
+                )}
+              </div>
+
+            </div>
+
             <div className="sales-search">
               <Search size={18} />
 
@@ -3245,17 +3555,14 @@ function App() {
               </button>
             </div>
 
-            {(salesSearch.trim()
-              ? searchedSales
-              : salesView === 'day'
-                ? daySales
-                : monthSales
-            ).length === 0 ? (
+            {visibleSales.length === 0 ? (
               <div className="empty sales-empty">
                 <div>🧾</div>
 
                 <h2>
-                  {salesSearch.trim()
+                  {salesSearch.trim() ||
+                  paymentStatusFilter !== 'todos' ||
+                  paymentMethodFilter !== 'todos'
                     ? 'Sin resultados'
                     : 'Todavía no hay ventas'}
                 </h2>
@@ -3263,29 +3570,29 @@ function App() {
                 <p>
                   {salesSearch.trim()
                     ? `No encontramos ventas que coincidan con "${salesSearch.trim()}".`
-                    : salesView === 'day'
-                      ? 'Registrá la primera venta de este día para empezar a llevar el control.'
-                      : 'No hay ventas registradas para este mes.'}
+                    : paymentStatusFilter !== 'todos' ||
+                      paymentMethodFilter !== 'todos'
+                      ? 'No hay ventas que coincidan con los filtros seleccionados.'
+                      : salesView === 'day'
+                        ? 'Registrá la primera venta de este día para empezar a llevar el control.'
+                        : 'No hay ventas registradas para este mes.'}
                 </p>
 
-                {!salesSearch.trim() && (
-                  <button
-                    className="sale-add"
-                    onClick={openSaleAdd}
-                  >
-                    <Plus size={17} />
-                    Registrar venta
-                  </button>
-                )}
+                {!salesSearch.trim() &&
+                  paymentStatusFilter === 'todos' &&
+                  paymentMethodFilter === 'todos' && (
+                    <button
+                      className="sale-add"
+                      onClick={openSaleAdd}
+                    >
+                      <Plus size={17} />
+                      Registrar venta
+                    </button>
+                  )}
               </div>
             ) : (
               <div className="sales-list">
-                {(salesSearch.trim()
-                  ? searchedSales
-                  : salesView === 'day'
-                    ? daySales
-                    : monthSales
-                ).map(s => (
+                {visibleSales.map(s => (
                   <article
                     className="sale-card sale-card-multiple"
                     key={s.id}
