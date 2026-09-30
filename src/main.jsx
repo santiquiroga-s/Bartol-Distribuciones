@@ -595,8 +595,11 @@ function App() {
     };
 
     monthSales.forEach(sale => {
-      if (sale.paymentStatus !== 'pagada') {
+      const isPaid = sale.paymentStatus === 'pagada';
+
+      if (!isPaid) {
         result.pendingPayments = true;
+        return;
       }
 
       if (
@@ -737,8 +740,11 @@ function App() {
     };
 
     daySales.forEach(sale => {
-      if (sale.paymentStatus !== 'pagada') {
+      const isPaid = sale.paymentStatus === 'pagada';
+
+      if (!isPaid) {
         result.pendingPayments = true;
+        return;
       }
 
       if (
@@ -1213,7 +1219,7 @@ function App() {
         C Categoría
       */
       worksheet.columns = [
-        { width: 42 },
+        { width: 47 },
         { width: 20 },
         { width: 22 }
       ];
@@ -2327,18 +2333,18 @@ function App() {
         worksheet.columns = [
           { width: 12 }, // N° Venta
           { width: 22 }, // Fecha
-          { width: 33 }, // Producto
+          { width: 43 }, // Producto
           { width: 12 }, // Cantidad
           { width: 17 }, // Precio Unitario
           { width: 12 }, // Subtotal
           { width: 17 }, // Costo Unitario
           { width: 12 }, // Ganancia
-          { width: 26 }, // Descripción
+          { width: 20 }, // Descripción
           { width: 15 }, // Estado
           { width: 15 }, // Total Venta
           { width: 15 }, // Pagado
           { width: 15 }, // Pendiente
-          { width: 22 }  // Medio de Pago
+          { width: 24 }  // Medio de Pago
         ];
 
         /*
@@ -3266,44 +3272,40 @@ function App() {
                     Ganancia del {salesView === 'day' ? 'día' : 'mes'}
                   </span>
 
+                  <strong>
+                    {money(
+                      salesView === 'day'
+                        ? totals.profit
+                        : monthTotals.profit
+                    )}
+                  </strong>
+
                   {(
                     salesView === 'day'
                       ? totals.pendingPayments || totals.pendingCost
                       : monthTotals.pendingPayments ||
                         monthTotals.pendingCost
-                  ) ? (
-                    <>
-                      <strong>—</strong>
-
-                      <small>
-                        {(
-                          salesView === 'day'
-                            ? totals.pendingPayments
-                            : monthTotals.pendingPayments
-                        ) &&
-                        (
-                          salesView === 'day'
-                            ? totals.pendingCost
-                            : monthTotals.pendingCost
-                        )
-                          ? 'Hay pagos pendientes y ventas con costo pendiente'
-                          : (
-                              salesView === 'day'
-                                ? totals.pendingPayments
-                                : monthTotals.pendingPayments
-                            )
-                          ? 'Hay pagos pendientes'
-                          : 'Hay ventas con costo pendiente'}
-                      </small>
-                    </>
-                  ) : (
-                    <strong>
-                      {money(
+                  ) && (
+                    <small>
+                      {(
                         salesView === 'day'
-                          ? totals.profit
-                          : monthTotals.profit
-                      )}
-                    </strong>
+                          ? totals.pendingPayments
+                          : monthTotals.pendingPayments
+                      ) &&
+                      (
+                        salesView === 'day'
+                          ? totals.pendingCost
+                          : monthTotals.pendingCost
+                      )
+                        ? 'Hay pagos y costos pendientes'
+                        : (
+                            salesView === 'day'
+                              ? totals.pendingPayments
+                              : monthTotals.pendingPayments
+                          )
+                        ? 'Hay pagos pendientes'
+                        : 'Hay costos pendientes'}
+                    </small>
                   )}
                 </div>
               )}
