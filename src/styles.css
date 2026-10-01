@@ -414,6 +414,11 @@ main {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 14px;
+
+  max-height: 540px;
+  overflow-y: auto;
+  padding-right: 8px;
+  scroll-behavior: smooth;
 }
 
 .card {
@@ -557,6 +562,11 @@ main {
   display: flex;
   flex-direction: column;
   gap: 9px;
+
+  max-height: 540px;
+  overflow-y: auto;
+  padding-right: 8px;
+  scroll-behavior: smooth;
 }
 
 .list-view .card {
