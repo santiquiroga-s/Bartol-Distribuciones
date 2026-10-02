@@ -664,14 +664,14 @@ main {
 
 .footer-brand strong {
   font-family: 'Space Grotesk';
-  font-size: 20px;
+  font-size: 22px;
   color: #201b16;
 }
 
 .footer-brand > span {
   margin: 0;
   color: #938472;
-  font-size: 12px;
+  font-size: 14px;
 }
 
 .footer-contact {
@@ -745,7 +745,7 @@ main {
 
   text-align: center;
   color: #938472;
-  font-size: 11px;
+  font-size: 15px;
 }
 
 .footer-bottom span {
