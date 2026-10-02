@@ -338,6 +338,16 @@ main {
   cursor: pointer;
 }
 
+.categories button:hover {
+  background: #e1d3c1;
+  color: #40362d;
+}
+
+.categories button.active:hover {
+  background: #f4bd25;
+  color: #201b16;
+}
+
 .categories button.active {
   background: #f4bd25;
   color: #201b16;
@@ -627,16 +637,139 @@ main {
 
 /* Footer */
 
-footer {
-  text-align: center;
-  padding: 25px;
+/* Footer */
+
+.site-footer {
+  max-width: 1200px;
+  margin: 45px auto 0;
+  padding: 30px 5% 24px;
+  border-top: 1px solid #201b1614;
+  color: #6f6255;
+}
+
+.site-footer-sales {
+  margin-top: -25px;
+  padding-top: 12px;
+  padding-bottom: 12px;
+  border-top: none;
+}
+
+.footer-brand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 24px;
+}
+
+.footer-brand strong {
+  font-family: 'Space Grotesk';
+  font-size: 20px;
+  color: #201b16;
+}
+
+.footer-brand > span {
+  margin: 0;
   color: #938472;
   font-size: 12px;
 }
 
-footer span {
+.footer-contact {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+.footer-contact a {
+  min-width: 0;
+  padding: 15px;
+  border: 1px solid #201b1614;
+  border-radius: 14px;
+  background: #fffaf3;
+  color: #54483d;
+  text-decoration: none;
+
+  display: flex;
+  align-items: center;
+  gap: 11px;
+
+  transition: .18s;
+}
+
+.footer-contact a:hover {
+  transform: translateY(-2px);
+  background: #e9dfd0;
+  border-color: #cdbda7;
+  box-shadow: 0 8px 22px #3b291210;
+}
+
+.footer-icon {
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+
+  display: grid;
+  place-items: center;
+
+  margin: 0 !important;
+  border-radius: 10px;
+  background: #f4bd25;
+
+  font-size: 17px;
+}
+
+.footer-contact a div {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: left;
+}
+
+.footer-contact a strong {
+  font-size: 12px;
+  color: #201b16;
+}
+
+.footer-contact a div span {
+  margin: 0;
+  color: #8b7b69;
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+.footer-bottom {
+  margin-top: 24px;
+  padding-top: 17px;
+  border-top: 1px solid #201b1610;
+
+  text-align: center;
+  color: #938472;
+  font-size: 11px;
+}
+
+.footer-bottom span {
   margin: 0 7px;
   color: #d29a16;
+}
+
+@media (max-width: 650px) {
+  .site-footer {
+    margin-top: 35px;
+    padding-top: 25px;
+  }
+
+  .footer-contact {
+    grid-template-columns: 1fr;
+  }
+
+  .footer-contact a {
+    padding: 13px 14px;
+  }
+
+  .footer-brand {
+    margin-bottom: 18px;
+  }
 }
 
 /* Modales */
