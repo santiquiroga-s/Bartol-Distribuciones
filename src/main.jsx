@@ -3311,7 +3311,7 @@ function App() {
               )}
             </section>
 
-            
+          <div className="sales-controls-row">
             {!salesSearch.trim() && (
               <div className="sales-view-switch">
                 <button
@@ -3539,6 +3539,7 @@ function App() {
               </div>
 
             </div>
+          </div>
 
             <div className="sales-search">
               <Search size={18} />
