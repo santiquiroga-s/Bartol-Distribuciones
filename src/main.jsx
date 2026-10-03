@@ -2960,7 +2960,7 @@ function App() {
                 </h1>
 
                 <p>
-                  Buscá, consultá y actualizá tus productos en segundos.
+                  Buscá, consultá y encontrá tus productos en segundos.
                 </p>
               </div>
 

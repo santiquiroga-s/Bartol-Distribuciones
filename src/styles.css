@@ -2415,13 +2415,28 @@ input[type='number'] {
     max-width: 145px;
   }
 
+  .view-switch {
+    display: none;
+  }
+
   .card {
+    min-height: auto;
     grid-template-columns: minmax(0, 1fr) auto auto;
     gap: 10px;
   }
 
+  .card .product-info {
+    display: flex;
+    align-items: flex-start;
+    gap: 7px;
+  }
+
   .card .product-info h2 {
     font-size: 16px;
+  }
+
+  .card .product-info .price {
+    margin-top: 0;
   }
 
   .card > .tag {
@@ -2432,16 +2447,6 @@ input[type='number'] {
 
   .list-view .card {
     grid-template-columns: minmax(0, 1fr) auto auto;
-  }
-
-  .list-view .card .product-info {
-    display: flex;
-    align-items: flex-start;
-    gap: 7px;
-  }
-
-  .list-view .card .product-info .price {
-    margin-top: 0;
   }
 
   /* Barra resumen con Nuevo producto */
